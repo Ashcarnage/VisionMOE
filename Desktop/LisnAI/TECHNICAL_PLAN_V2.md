@@ -1069,10 +1069,131 @@ backend/
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Phase 6: iOS Integration
+### Phase 6: Permission Layer ✅ (COMPLETED)
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  PHASE 6: iOS INTEGRATION                                        │
+│  PHASE 6: PERMISSION LAYER (Claude Code-style)                   │
+│                                                                 │
+│  ✅ Permission schema design (rules + pending permissions)       │
+│  ✅ Permission service with caching                              │
+│  ✅ Persistent permission rules (once, session, always)          │
+│  ✅ Pattern matching (exact, skill, tool, all)                   │
+│  ✅ Permission constraints (expiry, usage limits, filters)       │
+│  ✅ Action agent integration with permission checks              │
+│  ✅ REST API endpoints for permission management                 │
+│  ✅ WebSocket events for permission requests/responses           │
+│  ✅ Default permission rules for new users                       │
+│                                                                 │
+│  DELIVERABLE: Actions require approval like Claude Code          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Permission System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    PERMISSION LAYER                              │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                 Permission Rules                         │   │
+│  │  (Persistent rules stored in Firebase)                   │   │
+│  │                                                          │   │
+│  │  Pattern Types:                                          │   │
+│  │  • exact:   "apple-reminders:create_reminder"           │   │
+│  │  • skill:   "apple-reminders:*" (all reminder tools)    │   │
+│  │  • tool:    "*:send_message" (any skill's send)         │   │
+│  │  • all:     "*" (allow everything - dangerous!)         │   │
+│  │                                                          │   │
+│  │  Scopes:                                                 │   │
+│  │  • once:    One-time permission                         │   │
+│  │  • session: Valid for current session only              │   │
+│  │  • always:  Persistent permission                       │   │
+│  │                                                          │   │
+│  │  Constraints:                                            │   │
+│  │  • expiresAt: Auto-expire after timestamp               │   │
+│  │  • maxUses: Limit number of uses                        │   │
+│  │  • parameterFilters: Only allow specific params         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                          │                                       │
+│                          ▼                                       │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │               Action Execution Flow                      │   │
+│  │                                                          │   │
+│  │  1. User says "Remind me to call John tomorrow"         │   │
+│  │  2. Router classifies → intent: action                  │   │
+│  │  3. Action Agent identifies tool: create_reminder       │   │
+│  │  4. Permission Check:                                    │   │
+│  │     ├─ Check rules → Rule matched? → Execute ✓          │   │
+│  │     └─ No rule → Create pending permission              │   │
+│  │  5. If pending:                                          │   │
+│  │     ├─ Send permission.required event to iOS            │   │
+│  │     ├─ iOS shows approval UI                            │   │
+│  │     └─ User approves with scope (once/session/always)   │   │
+│  │  6. On approval:                                         │   │
+│  │     ├─ Optionally create persistent rule                │   │
+│  │     └─ Execute the pending action                       │   │
+│  │                                                          │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                          │                                       │
+│                          ▼                                       │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                   Risk Levels                            │   │
+│  │                                                          │   │
+│  │  HIGH:   send_message, send_email, make_call, delete_*  │   │
+│  │  MEDIUM: create_event, create_reminder, update_*        │   │
+│  │  LOW:    create_note, list_*, search_*                  │   │
+│  │                                                          │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Permission API Endpoints
+
+```
+REST API:
+  GET    /api/permissions              List permission rules
+  POST   /api/permissions              Create permission rule
+  PATCH  /api/permissions/:id          Update permission rule
+  DELETE /api/permissions/:id          Delete permission rule
+  GET    /api/permissions/pending      List pending permissions
+  POST   /api/permissions/pending/:id/approve   Approve pending
+  POST   /api/permissions/pending/:id/deny      Deny pending
+  POST   /api/permissions/allow-skill  Quick: allow all skill tools
+  POST   /api/permissions/allow-all    Quick: allow everything
+
+WebSocket:
+  permission.approve  Approve a pending permission (scope: once/session/always)
+  permission.deny     Deny a pending permission
+  permission.list     List pending permissions and rules
+
+Events (server → client):
+  permission.required  Broadcast when action needs approval
+  action.completed     Broadcast when approved action completes
+```
+
+#### Default Permission Rules (for new users)
+
+```typescript
+// Low-risk actions allowed by default:
+• apple-notes:*       All note operations (private, low risk)
+• *:list_reminders    Read-only reminder listing
+• *:list_events       Read-only calendar listing
+• *:search_notes      Read-only note search
+
+// These require explicit approval:
+• create_reminder     Creates persistent reminder
+• create_event        Creates calendar event
+• send_message        Sends to external recipient
+• send_email          Sends to external recipient
+• make_call           Initiates phone call
+• delete_*            Any destructive action
+```
+
+### Phase 7: iOS Integration
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  PHASE 7: iOS INTEGRATION                                        │
 │                                                                 │
 │  □ Create iOS Gateway client (WebSocket)                         │
 │  □ Implement node registration in iOS                            │
@@ -1080,6 +1201,8 @@ backend/
 │  □ Implement pending action sync                                 │
 │  □ Add deep linking for actions                                  │
 │  □ Integrate with Apple Shortcuts                                │
+│  □ Permission approval UI (SwiftUI sheet/alert)                  │
+│  □ Permission rules management screen                            │
 │                                                                 │
 │  DELIVERABLE: Full iOS ↔ Backend integration                     │
 └─────────────────────────────────────────────────────────────────┘
